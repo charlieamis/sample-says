@@ -1,0 +1,17 @@
+# Secrets — never commit keys
+.env
+.env.*
+*.key
+*key*.txt
+secrets/
+.secrets/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Node (only used for tests)
+node_modules/

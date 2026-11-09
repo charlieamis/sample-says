@@ -1,0 +1,3 @@
+#!/bin/sh
+# Blocks a commit if staged files look like they contain an API key.
+node scripts/check-secrets.mjs --staged || exit 1
