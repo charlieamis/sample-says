@@ -1,0 +1,9 @@
+{
+  "name": "sample-says",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "check-secrets": "node scripts/check-secrets.mjs"
+  }
+}
