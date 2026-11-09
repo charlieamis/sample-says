@@ -29,7 +29,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Unit tests
-        run: node --test tests/
+        run: node --test tests/*.test.mjs
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
