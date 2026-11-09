@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sample Says: a survey game where the crowd is a base model</title>
+  <meta name="description" content="A cooperative game-show where the survey is a base language model, sampled 100 times." />
+  <!-- Only the ACS API may be contacted from this page. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src https://infra.acsresearch.org; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cellipse cx='32' cy='32' rx='30' ry='22' fill='%231546d1' stroke='%23ffc928' stroke-width='5'/%3E%3Ctext x='32' y='42' font-size='28' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E100%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="rays" aria-hidden="true"></div>
+
+  <header class="marquee">
+    <div class="bulbs" aria-hidden="true"></div>
+    <h1><span>Sample</span> <span>Says</span></h1>
+    <p class="tagline">We surveyed 100 samples from a base language model…</p>
+  </header>
+
+  <main>
+    <!-- 1. Setup -->
+    <section id="setup" class="panel">
+      <h2>1 · Connect your ACS API key</h2>
+      <form id="key-form" autocomplete="off">
+        <label for="key-input" class="sr-only">ACS API key</label>
+        <input id="key-input" type="password" placeholder="acs-bm-…" spellcheck="false" autocomplete="off" />
+        <button type="submit" class="btn gold">Use key</button>
+        <label class="check"><input id="key-remember" type="checkbox" /> Remember for this tab</label>
+      </form>
+      <p id="key-status" class="muted" role="status"></p>
+      <p class="note">
+        🔒 Your key stays in this browser tab and is only sent to <code>infra.acsresearch.org</code>.
+        Tip: make a <strong>separate key with a low daily budget</strong> just for this game.
+        One question costs roughly 10–15k tokens.
+      </p>
+      <div class="row">
+        <label for="model-select">Model</label>
+        <select id="model-select" disabled><option value="llama-8b">llama-8b</option></select>
+        <span id="model-status" class="muted"></span>
+      </div>
+    </section>
+
+    <!-- 2. Pick a question -->
+    <section id="picker" class="panel">
+      <h2>2 · Pick a survey question</h2>
+      <div id="question-list" class="chips"></div>
+      <form id="custom-form" class="row" autocomplete="off">
+        <label for="custom-input" class="sr-only">Your own question</label>
+        <input id="custom-input" type="text" maxlength="140" placeholder="…or write your own: Name something…" />
+        <button type="submit" class="btn gold">Survey the model</button>
+      </form>
+      <p id="build-status" class="muted" role="status"></p>
+    </section>
+
+    <!-- 3. The board -->
+    <section id="stage" hidden>
+      <div class="question-banner"><span class="kicker">We sampled the model 100 times:</span> <span id="question-text"></span></div>
+
+      <div class="board-frame">
+        <div id="board" class="board"></div>
+      </div>
+
+      <div class="scorebar">
+        <div class="scorebox"><span class="label">Team score</span><span id="score">0</span></div>
+        <p class="team-note">You + the model, on the same team: every answer you find is a match between how you and it spread your bets.</p>
+        <div class="scorebox small"><span class="label">Guesses</span><span id="guess-count">0</span></div>
+      </div>
+
+      <form id="guess-form" class="guess-row" autocomplete="off">
+        <label for="guess-input" class="sr-only">Your guess</label>
+        <input id="guess-input" type="text" maxlength="60" placeholder="What did the samples say?" />
+        <button type="submit" class="btn gold big">Guess!</button>
+      </form>
+
+      <div id="result" class="result" aria-live="polite"></div>
+
+      <div class="actions">
+        <button id="reveal-btn" class="btn">Reveal the rest</button>
+        <button id="next-btn" class="btn">Another question</button>
+        <button id="tree-btn" class="btn ghost">Show the tree</button>
+        <button id="samples-btn" class="btn ghost">See all 100 samples</button>
+        <button id="api-btn" class="btn ghost">Show me this in the API</button>
+        <button id="sound-btn" class="btn ghost" aria-pressed="true">🔊 Sound on</button>
+      </div>
+
+      <section id="tree" class="panel" hidden></section>
+      <section id="samples" class="panel" hidden></section>
+      <section id="api-view" class="panel" hidden></section>
+    </section>
+
+    <details class="panel how">
+      <summary>How this works (and what it does <em>not</em> mean)</summary>
+      <ul>
+        <li><strong>The “survey” is one model, sampled 100 times.</strong> We show a base model the top of a survey-results page and let it write one respondent's answer, 100 times, at temperature 1. Those are 100 draws from <em>one</em> probability distribution, not 100 independent people.</li>
+        <li><strong>Clustering:</strong> answers that mean the same thing are grouped (“Dog”, “a dog”, “dogs” → Dog). Only answers given by at least two samples go on the board, up to 8.</li>
+        <li><strong>Judging:</strong> a guess that matches a group reveals it. If it doesn't, we ask the model directly how likely it thought your exact answer was (its log-probability, ending with a line break so “dog” doesn't get credit for “doghouse”).</li>
+        <li><strong>Counts are noisy.</strong> 100 samples is a small poll; run the same question twice and the board will shift a little. The “exact %” is the model's own probability, without sampling noise.</li>
+        <li>A base model isn't answering as itself; it's predicting what text comes next on a page like this. That makes it a mirror of how people write, which is why it often looks like a crowd.</li>
+      </ul>
+    </details>
+  </main>
+
+  <footer>
+    Built on the <a href="https://infra.acsresearch.org/docs/api" rel="noopener noreferrer">ACS Infra base-model API</a> ·
+    <a href="https://github.com/charlieamis/sample-says" rel="noopener noreferrer">source</a> ·
+    An homage to classic TV survey game shows; not affiliated with any of them.
+  </footer>
+
+  <!-- "Sample Says..." moment -->
+  <div id="overlay" class="overlay" hidden>
+    <div class="says"><span>Sample</span> <span>Says</span><span class="dots"><i>.</i><i>.</i><i>.</i></span></div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading" class="overlay dim" hidden>
+    <div class="loading-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <p id="loading-text">Surveying 100 samples…</p>
+      <p id="loading-sub" class="muted"></p>
+    </div>
+  </div>
+
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>
