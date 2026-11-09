@@ -17,6 +17,8 @@ test("cleanSurface keeps only the first item", () => {
   assert.equal(cleanSurface("Sunscreen. Because it's hot"), "Sunscreen");
   assert.equal(cleanSurface("1. Umbrella"), "Umbrella");
   assert.equal(cleanSurface("Snacks (chips)"), "Snacks");
+  assert.equal(cleanSurface("9/11"), "9/11");
+  assert.equal(cleanSurface("2) Towel"), "Towel");
 });
 
 test("singularize leaves short and s-words alone", () => {
@@ -47,6 +49,26 @@ test("clusterAnswers groups variants and counts", () => {
   assert.equal(clusters[1].label, "Cat");
   assert.equal(clusters[1].count, 3);
   assert.ok(clusters.some((c) => c.label === "Hamster" && c.count === 1));
+});
+
+test("synonyms, -ing forms, inner little words and generic tails merge", () => {
+  const { clusters } = clusterAnswers([
+    "Police", "Police officer", "Cop", "Policeman", "Brush teeth", "Brush their teeth", "Brushing teeth",
+    "Sleeping", "Sleep", "Movie", "Movie theater", "Movies", "Bike", "Bicycle", "Ice cream",
+  ]);
+  const by = Object.fromEntries(clusters.map((c) => [c.label, c.count]));
+  assert.equal(by["Police"], 4);
+  assert.equal(by["Brush Teeth"], 3);
+  assert.equal(by["Sleeping"] ?? by["Sleep"], 2);
+  assert.equal(by["Movie"], 3);
+  assert.equal(by["Bike"], 2);
+  assert.equal(by["Ice Cream"], 1); // "ice" is not "ice cream"
+  assert.equal(matchGuess("cop", clusters), clusters.findIndex((c) => c.label === "Police"));
+});
+
+test("titleCase leaves apostrophes alone", async () => {
+  const { titleCase } = await import("../js/cluster.js");
+  assert.equal(titleCase("don't feel well"), "Don't Feel Well");
 });
 
 test("matchGuess finds clusters and rejects near-misses", () => {

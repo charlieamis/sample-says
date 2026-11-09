@@ -4,11 +4,14 @@
 // Plain-language summary (also in the README):
 //   1. Clean each answer: lowercase, drop punctuation, drop leading words like "a", "the", "my",
 //      and keep only the first item if the model listed several ("towel, sunscreen" -> "towel").
-//   2. Make plural words singular ("dogs" -> "dog", "berries" -> "berry", "knives" -> "knife").
+//   2. Make plural words singular ("dogs" -> "dog"), treat "-ing" forms as the base word
+//      ("sleeping" -> "sleep"), skip little words in the middle ("brush their teeth" -> "brush teeth"),
+//      and apply a short list of everyday synonyms ("cop" -> "police", "bicycle" -> "bike").
 //   3. Answers that are now identical (ignoring spaces, so "sun screen" = "sunscreen") are one group.
 //   4. Small groups join a bigger group when they are clearly the same answer:
 //        - a one-letter typo in a longer word ("sunscren" -> "sunscreen"), or
-//        - one is the other plus a describing word or two ("beach towel" -> "towel").
+//        - one is the other plus a describing word or two ("beach towel" -> "towel"), or
+//        - one is the other plus a generic word ("police officer" -> "police", "movie theater" -> "movie").
 //   5. Each group is labelled with the wording the model used most often.
 
 const LEADING_FILLER = [
@@ -33,11 +36,21 @@ const KEEP_S = new Set([
   "sneakers", "headphones", "earbuds", "cards", "keys", "lunch",
 ]);
 
+// Singular words ending in "ie" (so "movies" -> "movie", not "movy").
+const IE_WORDS = new Set([
+  "movie", "cookie", "brownie", "zombie", "selfie", "smoothie", "rookie", "hippie", "goalie", "pixie",
+  "beanie", "freebie", "newbie", "birdie", "hoodie", "veggie", "barbie", "calorie", "prairie", "genie",
+  "pie", "tie", "lie", "die", "sweetie", "bootie", "boogie", "auntie", "collie", "eerie", "magpie", "pinkie",
+]);
+
 export function singularize(word) {
   if (word.length <= 3) return word;
   if (IRREGULAR[word]) return IRREGULAR[word];
   if (KEEP_S.has(word)) return word;
-  if (/ies$/.test(word) && word.length > 4) return word.slice(0, -3) + "y"; // berries -> berry
+  if (/ies$/.test(word) && word.length > 4) {
+    const ie = word.slice(0, -1); // movies -> movie, cookies -> cookie
+    return IE_WORDS.has(ie) ? ie : word.slice(0, -3) + "y"; // berries -> berry
+  }
   if (/(ches|shes|sses|xes|zes)$/.test(word)) return word.slice(0, -2); // boxes -> box
   if (/oes$/.test(word) && word.length > 4) return word.slice(0, -2); // potatoes -> potato
   if (/[^su]s$/.test(word)) return word.slice(0, -1); // dogs -> dog (not "glass", "bus")
@@ -47,7 +60,7 @@ export function singularize(word) {
 /** Strip a raw model answer down to the part we display: first item, no quotes or trailing punctuation. */
 export function cleanSurface(raw) {
   let s = String(raw ?? "").replace(/\r/g, "").split("\n")[0].trim();
-  s = s.replace(/^["'“”‘’`*\-•\d.)\s]+/, ""); // leading quotes, bullets, "1." numbering
+  s = s.replace(/^["'“”‘’`*\-•\s]+/, "").replace(/^\d{1,2}[.)]\s+/, ""); // leading quotes, bullets, "1." numbering (not "9/11")
   // Keep only the first item if the model listed several, or added an explanation.
   s = s.split(/\s*(?:[,;:!?(]|\.\s|\.$| - | -- | – | — |\bbecause\b|\bsince\b)/i)[0];
   s = s.replace(/["'“”‘’`*.]+$/, "").trim();
@@ -68,8 +81,40 @@ export function normalizeWords(raw) {
     }
   }
   if (!s) return [];
-  return s.split(" ").map(singularize);
+  let words = s.split(" ").filter((w, i, all) => all.length === 1 || !INNER_STOPWORDS.has(w));
+  words = words.map((w) => stemIng(singularize(w)));
+  let key = words.join(" ");
+  key = PHRASE_SYNONYMS[key] || key;
+  return key.split(" ").map((w) => WORD_SYNONYMS[w] || w);
 }
+
+// Little words that don't change the answer ("brush their teeth" = "brush teeth").
+const INNER_STOPWORDS = new Set(["a", "an", "the", "their", "his", "her", "my", "your", "our", "its", "some"]);
+
+// A short list of everyday synonyms a game-show judge would accept. Applied to both answers and guesses.
+const WORD_SYNONYMS = {
+  cop: "police", policeman: "police", policewoman: "police", bicycle: "bike", fireman: "firefighter",
+  firemen: "firefighter", television: "tv", telly: "tv", automobile: "car", cellphone: "phone",
+  smartphone: "phone", mom: "mother", mum: "mother", dad: "father", cinema: "movie", film: "movie",
+};
+const PHRASE_SYNONYMS = {
+  "police officer": "police", "cell phone": "phone", "mobile phone": "phone", "fire fighter": "firefighter",
+  "movie theater": "movie", "movie theatre": "movie", "fire man": "firefighter",
+};
+
+/** "-ing" forms count as the base word: sleeping -> sleep, watching -> watch, running -> run. */
+export function stemIng(word) {
+  if (word.length <= 5 || !word.endsWith("ing")) return word;
+  let stem = word.slice(0, -3);
+  if (/([b-df-hj-np-tv-z])\1$/.test(stem)) stem = stem.slice(0, -1); // running -> run
+  return stem;
+}
+
+// Generic words that can follow an answer without changing it ("police officer", "movie theater").
+const GENERIC_TAIL = new Set([
+  "officer", "man", "woman", "person", "worker", "theater", "theatre", "show", "time", "stuff", "thing",
+  "place", "shop", "store", "night", "trip", "session",
+]);
 
 export function normalize(raw) {
   return normalizeWords(raw).join(" ");
@@ -109,13 +154,17 @@ export function similarKeys(a, b) {
   if (short.length < long.length && long.length - short.length <= 2) {
     const tail = long.slice(long.length - short.length);
     if (tail.join(" ") === short.join(" ") && short.join("").length >= 3) return true;
+    // Same start plus only generic words ("police officer" ~ "police", "movie night" ~ "movie").
+    const head = long.slice(0, short.length);
+    const extra = long.slice(short.length);
+    if (head.join(" ") === short.join(" ") && extra.every((w) => GENERIC_TAIL.has(w))) return true;
   }
   return false;
 }
 
-/** Title-case a label for the board ("ice cream" -> "Ice Cream"). */
+/** Title-case a label for the board ("ice cream" -> "Ice Cream", "don't" stays "Don't"). */
 export function titleCase(s) {
-  return s.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+  return s.replace(/(^|[\s\-/])([a-z])/g, (m, pre, c) => pre + c.toUpperCase());
 }
 
 /**
@@ -162,8 +211,12 @@ export function clusterAnswers(answers) {
   list.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 
   const clusters = list.map((g) => {
-    // Label = most common surface wording, minus leading filler words.
-    const top = [...g.members.entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0][0];
+    // Label = most common surface wording, minus leading filler words. On a tie, prefer the wording
+    // that reads like the group's normalised form ("Police" over "Cop"), then the shorter one.
+    const plain = (s) => (g.keys.has(s.toLowerCase()) ? 0 : 1);
+    const top = [...g.members.entries()].sort(
+      (a, b) => b[1] - a[1] || plain(a[0]) - plain(b[0]) || a[0].length - b[0].length,
+    )[0][0];
     const label = titleCase(stripFiller(top));
     return { label, count: g.count, key: g.key, keys: g.keys, members: g.members, indices: g.indices };
   });
