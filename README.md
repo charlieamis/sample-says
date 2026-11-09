@@ -14,8 +14,8 @@ survey game shows and is not affiliated with any of them.
 ## How to play
 
 1. **Paste your ACS API key.** You need an approved ACS Infra account.
-   *Tip: make a separate key just for this game with a low daily budget.* One question costs roughly
-   10–15k tokens (building the board plus a handful of guesses).
+   *Tip: make a separate key just for this game with a low daily budget.* One full round (board plus
+   six guesses) used about 7,000 tokens in testing, so a 100k/day key covers roughly a dozen rounds.
 2. **Pick a question**, or write your own ("Name something…" questions work best).
 3. The game samples the model 100 times and builds a board of the top answers (up to 8).
 4. **Type a guess.** *Sample says…*
@@ -35,20 +35,36 @@ blocks every other destination.
 
 ### 1. Building the board
 
-A base model just continues text. So we show it the top of a raw survey-results page:
+A base model just continues text. So we show it a page of survey results: two finished example questions, then
+the game question with the first respondent's answer left open:
 
 ```
-SURVEY RESULTS: RAW RESPONSES
-We asked 100 people the question below. Each person answered with a short phrase of one to three words. Responses are listed exactly as given, one per line.
+NATIONAL SURVEY: TOP-OF-MIND ANSWERS
+100 adults were asked each question and gave the first answer that came to mind, in a few words.
 
-Question: "Name something people bring to the beach."
-
-Respondent #42:
+Question 1: Name a color people paint their bedroom.
+Respondent 1: Blue
+Respondent 2: White
+...
+Question 2: Name something people drink in the morning.
+Respondent 1: Coffee
+...
+Question 3: Name something people bring to the beach.
+Respondent 1:
 ```
 
 Whatever the model writes next, up to the end of the line (`stop: ["\n"]`), is one respondent's answer.
-We send **10 copies of this prompt** (respondent numbers 7, 13, 22, …) **× 10 samples each = 100 answers, in a
-single API request**, at temperature 1 (the model's unmodified distribution).
+We send **the same prompt 10 times × 10 samples each = 100 answers, in a single API request**, at temperature 1
+(the model's unmodified distribution).
+
+**Why the examples?** Our first version showed only the question, framed as a messy "raw responses" page. Tested on
+llama-8b, that produced noise: about half the answers started with a quote mark, many were run-on lists or junk, and
+"beach" scattered into 78 different answers with the top one at just 4/100. Two finished examples teach the
+*format* (short, plain, one item, no quotes) on unrelated topics, so they don't hint at the *content*. "Beach" then
+gave 17–22 answers with Towel at ~36/100: a real survey-board shape.
+
+**Why one identical prompt?** So the "exact %" we compute for guesses comes from exactly the distribution the board
+was sampled from.
 
 ### 2. Clustering answers (plain language)
 
@@ -58,22 +74,30 @@ judge would. For each answer we:
 1. **Clean it up:** lowercase it, drop punctuation and quotes, and drop leading filler words like *a, the, my, some*.
    If the model listed several things ("towel, sunscreen") or explained itself ("sunscreen because…"), we keep only
    the first item.
-2. **Make plurals singular:** dogs → dog, berries → berry, boxes → box, knives → knife. A short list of words like
-   *sunglasses* and *jeans* is left alone.
+2. **Make words comparable:**
+   - plurals become singular (dogs → dog, berries → berry, movies → movie, knives → knife), and a short list of words
+     like *sunglasses* and *jeans* is left alone;
+   - "-ing" forms count as the base word (sleeping → sleep, watching TV → watch TV);
+   - little words in the middle are ignored ("brush *their* teeth" = "brush teeth");
+   - a short list of everyday synonyms is applied (cop / policeman / police officer → police, bicycle → bike,
+     fireman → firefighter, television → TV, movie theater → movie).
 3. **Group identical answers.** Spaces are ignored here, so "sun screen" and "sunscreen" match.
 4. **Fold small groups into bigger ones** when they are clearly the same answer:
    - **A one-letter typo in a longer word** ("sunscren" → "sunscreen"). We only allow this for words of 6+ letters,
      because in short words one letter changes the meaning (towel ≠ tower, cat ≠ car).
    - **The same thing plus a describing word or two** ("beach towel" → "towel", "chocolate cake" → "cake"). The last
-     word has to match, so "doghouse" never becomes "dog".
-5. **Label** each group with the wording the model used most often.
+     word has to match, so "doghouse" never becomes "dog", and "ice" never becomes "ice cream".
+   - **The same thing plus a generic word** ("police officer" → "police", "movie night" → "movie"), from a short list
+     of generic words such as *officer, theater, store, time, stuff*.
+5. **Label** each group with the wording the model used most often (on a tie, the plainest one: "Police", not "Cop").
 
 Answers that come out empty or longer than six words are set aside as unusable (you can see them crossed out under
 "See all 100 samples"). Only answers given by **at least two samples** go on the board, up to 8, like the show.
 
 This is deliberately simple and rule-based (no embeddings and no second AI judging), so it's predictable and
-explainable. It will occasionally keep two things apart that a human would merge ("Snacks" vs "Food"). That's a
-fair representation of what the samples literally said.
+explainable. It will sometimes keep apart things a human judge would merge. In testing: "Sick" vs "Don't Feel
+Good", "Sleep In" vs "Overslept", "Snacks" vs "Food". That's a fair representation of what the samples literally
+said. Catching those would need a meaning-aware judge (embeddings or a second model), a possible later upgrade.
 
 Guesses are matched with the same rules, so typing "towels" or "a towel" finds "Towel".
 
@@ -84,8 +108,8 @@ We ask the model for the probability of your exact answer:
 - Send `prompt + " " + your answer + "\n"` with `echo: true, logprobs: 10, max_tokens: 1`, and add up the
   log-probabilities of your answer's tokens.
 - **The line break matters.** It is the "end of answer" signal: without it, "dog" would get credit for every answer
-  that *starts* with dog, like "doghouse". Because the tokenizer has several newline tokens (`\n`, `\n\n`, …) we add
-  up every option that starts with a newline.
+  that *starts* with dog, like "doghouse". Because the tokenizer has several "end of line" tokens (`\n`, `\n\n`, `" \n"`,
+  `".\n"`) we add up all of them.
 - We score a few capitalisations ("Kite", "kite") and add them together, because to the model they are different
   strings.
 - For comparison, we score the board answers the same way (adding up the wordings the samples used), so the game can
@@ -102,9 +126,12 @@ shows how many samples started that way next to the model's actual probability f
 - 100 samples from one model are **not** 100 independent people. They're 100 draws from one probability
   distribution. Run a question twice and the counts will shift by a few.
 - The model isn't "answering as itself". It's predicting what text would come next on a page like this.
-- The exact-probability score uses one prompt (respondent #42), while sampling uses 10 prompts that differ only in the
-  respondent number. The two can differ slightly. Answers that end with a period before the newline get slightly
-  less credit than they should.
+- Some questions make the model pile onto one answer (in testing: "a food at a birthday party" gave Cake 85/100,
+  "something with wheels" gave Car 72/100). That's a real trait of base models (they concentrate on the most obvious
+  answer more than a crowd would), but it makes a dull board, so those were left out of the built-in questions.
+  Custom questions can still do it.
+- Guess wordings are scored as typed (plus capitalisation variants). A guess that matches a board answer through a
+  synonym ("cop" for Police) reveals the tile, but its own probability reflects the model's chance of writing "cop".
 
 ---
 
@@ -185,8 +212,10 @@ then open http://localhost:8123. Run the tests with `node --test tests/*.test.mj
   using original CSS, synthesized sounds and wording. No logos, fonts or audio from any real show.
 - **No strikes.** Misses are a "consolation result" showing the model's probability, which keeps it cooperative. A
   round ends when you clear the board or press "Reveal the rest".
+- **Built-in questions were test-run on llama-8b** and kept only if no answer took more than about half the samples.
 - **Board = answers with ≥ 2 samples, max 8.** If fewer than 3 answers reach 2 samples, we show the top ones anyway.
-- **Prompt framing** is a "raw survey responses" page rather than a TV-show transcript. That keeps answers short and
-  the end-of-answer signal clean, and avoids the model imitating game-show patter.
+- **Prompt framing** is a survey-results page with two example questions, rather than a TV-show transcript. That keeps
+  answers short and the end-of-answer signal clean, and avoids the model imitating game-show patter (see "Why the
+  examples?" above for the before/after).
 - **Rule-based clustering** (see above) rather than embeddings or an LLM judge: cheaper, faster and explainable.
 - **Sound** is synthesized with the Web Audio API and can be muted.

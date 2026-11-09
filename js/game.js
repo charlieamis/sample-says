@@ -454,7 +454,7 @@ function renderSamples(sec) {
     el(
       "p",
       "muted",
-      `Exactly what the model wrote after “Respondent #N:”. Crossed-out ones were empty or too long to count (${state.unusable.length}). ` +
+      `Exactly what the model wrote after “Respondent 1:”. Crossed-out ones were empty or too long to count (${state.unusable.length}). ` +
         `Model served: ${state.servedModel}.`,
     ),
   );
