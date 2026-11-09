@@ -3,43 +3,55 @@
 import { complete } from "./api.js";
 import { clusterAnswers, matchGuess, cleanSurface } from "./cluster.js";
 
-// 10 prompts x 10 samples = 100 "respondents" in a single API request
+// The same prompt sent 10 times x 10 samples = 100 "respondents" in a single API request
 // (output-work cap: 10 prompts x 10 samples x 10 tokens = 1,000, far below 32,000).
-const RESPONDENTS = [7, 13, 22, 31, 42, 56, 64, 75, 88, 97];
+// Every sample uses the identical prompt, so the probabilities we score guesses with are exactly
+// the distribution the board was sampled from.
+const PROMPT_COPIES = 10;
 const PER_PROMPT = 10;
 const MAX_TOKENS = 10;
-const SCORE_RESPONDENT = 42; // the prompt used to score guesses (also one of the sampling prompts)
 const BOARD_MAX = 8;
 const MAX_WORDINGS_PER_ANSWER = 6;
 
-export const SAMPLE_COUNT = RESPONDENTS.length * PER_PROMPT;
+export const SAMPLE_COUNT = PROMPT_COPIES * PER_PROMPT;
+
+// Two finished example questions. They show the FORMAT we want (short, plain, one item, no quotes)
+// on topics unrelated to any game question, so they don't hint at answers.
+const EXAMPLES = [
+  ["Name a color people paint their bedroom.", ["Blue", "White", "Gray", "Light green", "Blue", "Beige"]],
+  ["Name something people drink in the morning.", ["Coffee", "Orange juice", "Tea", "Coffee", "Water", "Milk"]],
+];
 
 /**
  * The frame that makes a base model "know" it is writing one survey answer.
- * A base model just continues text, so we show it the top of a raw survey-results page and stop at
- * the end of one line: whatever it writes after "Respondent #N:" is that respondent's answer.
+ * A base model just continues text, so we show it a page of survey results: two finished questions,
+ * then the game question with "Respondent 1:" left open. Whatever it writes up to the end of that
+ * line is one respondent's answer.
  */
-export function surveyPrompt(question, respondent) {
+export function surveyPrompt(question) {
   const q = question.trim().replace(/\s+/g, " ");
-  return (
-    `SURVEY RESULTS: RAW RESPONSES\n` +
-    `We asked 100 people the question below. Each person answered with a short phrase of one to three words. ` +
-    `Responses are listed exactly as given, one per line.\n\n` +
-    `Question: "${q}"\n\n` +
-    `Respondent #${respondent}:`
-  );
+  let text =
+    `NATIONAL SURVEY: TOP-OF-MIND ANSWERS\n` +
+    `100 adults were asked each question and gave the first answer that came to mind, in a few words.\n\n`;
+  EXAMPLES.forEach(([eq, answers], i) => {
+    text += `Question ${i + 1}: ${eq}\n`;
+    answers.forEach((a, j) => (text += `Respondent ${j + 1}: ${a}\n`));
+    text += `\n`;
+  });
+  text += `Question ${EXAMPLES.length + 1}: ${q}\nRespondent 1:`;
+  return text;
 }
 
 /** Build a board. Returns everything the UI needs, including raw samples for transparency. */
 export async function buildBoard(question, model, { cold = false } = {}) {
-  const prompts = RESPONDENTS.map((r) => surveyPrompt(question, r));
+  const prompts = Array(PROMPT_COPIES).fill(surveyPrompt(question));
   const [sampleRes, firstTokenRes] = await Promise.all([
     complete(
       { model, prompt: prompts, n: PER_PROMPT, max_tokens: MAX_TOKENS, temperature: 1, stop: ["\n"], logprobs: 0 },
       { cold },
     ),
     // The model's actual probabilities for the first token of an answer (for the tree view).
-    complete({ model, prompt: surveyPrompt(question, SCORE_RESPONDENT), max_tokens: 1, temperature: 1, logprobs: 20 }, { cold }),
+    complete({ model, prompt: surveyPrompt(question), max_tokens: 1, temperature: 1, logprobs: 20 }, { cold }),
   ]);
 
   const samples = sampleRes.choices.map((c) => ({
@@ -115,7 +127,7 @@ export function guessVariants(guess) {
  */
 export async function scoreSurfaces(question, model, surfaces) {
   if (!surfaces.length) return [];
-  const base = surveyPrompt(question, SCORE_RESPONDENT);
+  const base = surveyPrompt(question);
   const res = await complete({
     model,
     prompt: surfaces.map((s) => `${base} ${s}\n`),
@@ -141,10 +153,11 @@ function scoreChoice(choice, answerStart) {
   if (first < 0) return { logprob: -Infinity, prob: 0 };
   let logprob = 0;
   for (let i = first; i < last; i++) logprob += lp.token_logprobs[i];
-  // End-of-answer: any token starting with a newline.
+  // End-of-answer: any token that is a line break, optionally after a space or full stop
+  // ("\n", "\n\n", " \n", ".\n") all mean "the answer ended here".
   const top = lp.top_logprobs[last] || {};
   let endProb = 0;
-  for (const [tok, l] of Object.entries(top)) if (tok.startsWith("\n")) endProb += Math.exp(l);
+  for (const [tok, l] of Object.entries(top)) if (/^[ .!]*\n/.test(tok)) endProb += Math.exp(l);
   if (!tokens[last].startsWith("\n")) endProb = Math.exp(lp.token_logprobs[last]); // tokenizer merged the newline
   if (!(endProb > 0)) endProb = Math.exp(lp.token_logprobs[last]);
   logprob += Math.log(endProb);
