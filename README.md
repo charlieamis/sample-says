@@ -6,14 +6,14 @@ A cooperative survey game show where the "100 people surveyed" are **100 samples
 You try to guess the most common answers. Every answer you find is a place where your sense of "what people
 would say" lines up with how the model spreads its probability. You and the model are on the same team.
 
-Built on the [ACS Infra base-model API](https://infra.acsresearch.org/docs/api). It is an homage to classic TV
+Built on the [ACS Infra base-model API](https://docs.v2.infra.acsresearch.org/docs). It is an homage to classic TV
 survey game shows and is not affiliated with any of them.
 
 ---
 
 ## How to play
 
-1. **Paste your ACS API key.** You need an approved ACS Infra account.
+1. **Paste your ACS API key.** You need an approved ACS Infra account and a key made at [v2.infra.acsresearch.org](https://v2.infra.acsresearch.org) (keys start with `sk-acs-`; old `acs-bm-` keys don't work).
    *Tip: make a separate key just for this game with a low daily budget.* One full round (board plus
    six guesses) used about 7,000 tokens in testing, so a 100k/day key covers roughly a dozen rounds.
 2. **Pick a question**, or write your own ("Name something…" questions work best).
@@ -26,7 +26,7 @@ survey game shows and is not affiliated with any of them.
    **Show me this in the API** (the exact request bodies, ready for `curl`).
 
 Your key stays in the browser tab (memory only, or `sessionStorage` if you tick "Remember for this tab", which is
-cleared when the tab closes). It is only ever sent to `infra.acsresearch.org`, and the page's Content Security Policy
+cleared when the tab closes). It is only ever sent to `api.v2.infra.acsresearch.org`, and the page's Content Security Policy
 blocks every other destination.
 
 ---
@@ -190,7 +190,7 @@ then open http://localhost:8123. Run the tests with `node --test tests/*.test.mj
 
 - `.gitignore` ignores `.env` files, `*.key`, and `*key*.txt`.
 - A **pre-commit hook** (`.githooks/pre-commit`) scans staged files and blocks the commit if anything looks like an
-  ACS key (`acs-bm-…`), OpenAI/GitHub/AWS/Slack token, or private key. After a fresh clone, turn it on once with:
+  ACS key (`sk-acs-…` or old `acs-bm-…`), OpenAI/GitHub/AWS/Slack token, or private key. After a fresh clone, turn it on once with:
 
   ```bash
   git config core.hooksPath .githooks

@@ -7,7 +7,7 @@
   <meta name="description" content="A cooperative game-show where the survey is a base language model, sampled 100 times." />
   <!-- Only the ACS API may be contacted from this page. -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; connect-src https://infra.acsresearch.org; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'" />
+        content="default-src 'self'; connect-src https://api.v2.infra.acsresearch.org; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'" />
   <meta name="referrer" content="no-referrer" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cellipse cx='32' cy='32' rx='30' ry='22' fill='%231546d1' stroke='%23ffc928' stroke-width='5'/%3E%3Ctext x='32' y='42' font-size='28' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E100%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="css/style.css" />
@@ -27,13 +27,13 @@
       <h2>1 · Connect your ACS API key</h2>
       <form id="key-form" autocomplete="off">
         <label for="key-input" class="sr-only">ACS API key</label>
-        <input id="key-input" type="password" placeholder="acs-bm-…" spellcheck="false" autocomplete="off" />
+        <input id="key-input" type="password" placeholder="sk-acs-…" spellcheck="false" autocomplete="off" />
         <button type="submit" class="btn gold">Use key</button>
         <label class="check"><input id="key-remember" type="checkbox" /> Remember for this tab</label>
       </form>
       <p id="key-status" class="muted" role="status"></p>
       <p class="note">
-        🔒 Your key stays in this browser tab and is only sent to <code>infra.acsresearch.org</code>.
+        🔒 Your key stays in this browser tab and is only sent to <code>api.v2.infra.acsresearch.org</code>.
         Tip: make a <strong>separate key with a low daily budget</strong> just for this game.
         One round (board + a few guesses) uses about 7–10k tokens.
       </p>
@@ -105,7 +105,7 @@
   </main>
 
   <footer>
-    Built on the <a href="https://infra.acsresearch.org/docs/api" rel="noopener noreferrer">ACS Infra base-model API</a> ·
+    Built on the <a href="https://docs.v2.infra.acsresearch.org/docs" rel="noopener noreferrer">ACS Infra base-model API</a> ·
     <a href="https://github.com/charlieamis/sample-says" rel="noopener noreferrer">source</a> ·
     An homage to classic TV survey game shows; not affiliated with any of them.
   </footer>

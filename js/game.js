@@ -33,7 +33,7 @@ function refreshKeyStatus() {
     });
     s.append(forget);
   } else {
-    s.textContent = "No key yet. You need an approved ACS Infra account; create a key on the API keys page.";
+    s.textContent = "No key yet. You need an approved ACS Infra account; create a key at v2.infra.acsresearch.org (API Keys).";
   }
   setPickerEnabled(api.hasKey());
 }
@@ -474,7 +474,7 @@ function renderApi(sec) {
     el(
       "p",
       "muted",
-      "These are the request bodies this page sent to POST https://infra.acsresearch.org/v1/completions (newest last). " +
+      "These are the request bodies this page sent to POST https://api.v2.infra.acsresearch.org/v1/completions (newest last). " +
         "Paste one into the curl command below to try it yourself. Your key is never shown here.",
     ),
   );

@@ -6,7 +6,8 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const PATTERNS = [
-  ["ACS API key", /acs-bm-[A-Za-z0-9]{4,}-[A-Za-z0-9_\-]{8,}/],
+  ["ACS API key (v1)", /acs-bm-[A-Za-z0-9]{4,}-[A-Za-z0-9_\-]{8,}/],
+  ["ACS API key (v2)", /\bsk-acs-[A-Za-z0-9_\-]{8,}/],
   ["OpenAI-style key", /\bsk-[A-Za-z0-9_\-]{20,}/],
   ["GitHub token", /\bgh[pousr]_[A-Za-z0-9]{30,}/],
   ["AWS access key", /\bAKIA[0-9A-Z]{16}\b/],
